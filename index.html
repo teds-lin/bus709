@@ -69,6 +69,9 @@
   }
   @media (prefers-color-scheme: dark) { .error { background: #3a1d1d; color: #ffb4b4; } }
   .error a { color: inherit; }
+  .error.stale { background: #fff4d6; color: #7a5300; }
+  @media (prefers-color-scheme: dark) { .error.stale { background: #3a3014; color: #ffd98a; } }
+  #board.old { opacity: .55; }
   .direction { margin-bottom: 20px; }
   .direction h2 {
     font-size: 1.05rem; margin: 8px 0 10px; padding-left: 10px;
@@ -131,7 +134,7 @@
 <footer>
   資料來源：<a href="https://ebus.tycg.gov.tw/ebus/" target="_blank" rel="noopener">桃園市公車動態資訊系統</a>。
   每 30 秒自動更新，頁面切到背景時暫停。到站時間僅供參考，以實際車輛為準。
-  「預定」表示車輛尚未發車，顯示的是表定時間；表定時間在 30 分鐘內時改顯示「約 X 分」。
+  「預定」表示車輛尚未發車，顯示的是表定時間；表定時間在 30 分鐘內時改顯示「約 X 分」。連線失敗時保留上次資料並自動重試。
 </footer>
 
 <script>
@@ -162,7 +165,8 @@
   }`;
 
   const $ = id => document.getElementById(id);
-  let remain = REFRESH_SEC, loading = false, lastLoad = 0;
+  const RETRY_SEC = 5;
+  let remain = REFRESH_SEC, loading = false, lastLoad = 0, lastOk = 0, fails = 0, lastErr = '';
 
   // 依停靠順序判斷方向：在同一個 goBack 序列中，
   // 龍潭中正路排在永寧轉運站前面＝往永寧；排在後面＝往龍潭。
@@ -288,10 +292,24 @@
     }).join('');
   }
 
-  function showError(msg) {
+  const OFFICIAL = '<a href="https://ebus.tycg.gov.tw/ebus/" target="_blank" rel="noopener">桃園公車動態網站</a>';
+
+  // 失敗時：有舊資料就保留畫面、改成黃色提示「顯示的是 X 分鐘前的資料」；
+  // 從來沒成功過才顯示紅色錯誤。
+  function showStatus() {
     const el = $('error');
-    if (!msg) { el.style.display = 'none'; return; }
-    el.innerHTML = `${esc(msg)}，請稍後再試，或改用 <a href="https://ebus.tycg.gov.tw/ebus/" target="_blank" rel="noopener">桃園公車動態網站</a>。`;
+    if (!fails) { el.style.display = 'none'; $('board').classList.remove('old'); return; }
+    if (lastOk) {
+      const sec = Math.floor((Date.now() - lastOk) / 1000);
+      const age = sec < 60 ? '不到 1 分鐘前' : `${Math.floor(sec / 60)} 分鐘前`;
+      el.className = 'error stale';
+      el.innerHTML = `連線不穩，顯示的是${age}的資料，自動重試中…`
+        + (fails >= 3 ? `若持續失敗可改用 ${OFFICIAL}。` : '');
+      $('board').classList.toggle('old', sec >= 120);
+    } else {
+      el.className = 'error';
+      el.innerHTML = `資料暫時無法取得（${esc(lastErr)}），自動重試中…或改用 ${OFFICIAL}。`;
+    }
     el.style.display = 'block';
   }
 
@@ -313,24 +331,30 @@
       const json = await res.json();
       if (!json.data) throw new Error((json.errors && json.errors[0] && json.errors[0].message) || '回應格式不符');
       render(json.data);
-      showError('');
-      const now = new Date();
-      $('updated').textContent = `更新於 ${now.toLocaleTimeString('zh-TW', { hour12: false })}`;
+      fails = 0;
+      lastOk = Date.now();
     } catch (err) {
       console.error(err);
-      showError(`資料暫時無法取得（${err.name === 'AbortError' ? '逾時' : err.message}）`);
-      $('updated').textContent = '更新失敗';
+      fails += 1;
+      lastErr = err.name === 'AbortError' ? '逾時' : err.message;
     } finally {
       loading = false;
-      remain = REFRESH_SEC;
       lastLoad = Date.now();
+      // 失敗後前 3 次 5 秒就重試，之後回到 30 秒，避免一直狂打伺服器
+      remain = fails && fails <= 3 ? RETRY_SEC : REFRESH_SEC;
+      $('countdown').textContent = `${remain} 秒後${fails ? '重試' : '更新'}`;
+      $('updated').textContent = lastOk
+        ? `更新於 ${new Date(lastOk).toLocaleTimeString('zh-TW', { hour12: false })}`
+        : '更新失敗';
+      showStatus();
     }
   }
 
   function tick() {
-    if (document.hidden) return;
+    if (document.hidden || loading) return;
     remain -= 1;
-    $('countdown').textContent = `${Math.max(remain, 0)} 秒後更新`;
+    $('countdown').textContent = fails ? `${Math.max(remain, 0)} 秒後重試` : `${Math.max(remain, 0)} 秒後更新`;
+    if (fails) showStatus();
     if (remain <= 0) load();
   }
 

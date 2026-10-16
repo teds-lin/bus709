@@ -182,7 +182,9 @@
   function classify(est) {
     if (!est) return { text: '無資料', cls: 'off', sort: 1e6 };
     if (est.isOperationDay === false) return { text: '今日未營運', cls: 'off', sort: 1e6 };
-    if (est.isSuspended) return { text: '目前停駛', cls: 'off', sort: 1e6 };
+    // 標示文字與桃園公車動態網站一致：isSuspended＝末班駛離
+    if (est.isSuspended) return { text: '末班駛離', cls: 'off', sort: 1e6 };
+    if (est.isConstruction || est.isEvent) return { text: '改道不停靠', cls: 'off', sort: 1e6 };
     const ct = (est.comeTime || '').trim();
     const eta = est.etas && est.etas.length ? est.etas[0] : null;
     if (/進站中/.test(ct)) return { text: '進站中', cls: 'soon', sort: 0 };

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>709 等車時間</title>
+<meta name="description" content="桃園公車 709、709A、709B、709C 於龍潭中正路與永寧轉運站的即時等候時間">
+<meta name="theme-color" content="#1f4e79">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f4e79'/%3E%3Ctext x='32' y='42' font-size='24' font-family='Arial' font-weight='700' fill='white' text-anchor='middle'%3E709%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f3f5f8;
+    --card: #ffffff;
+    --text: #1d2330;
+    --muted: #6b7280;
+    --line: #e3e7ee;
+    --accent: #1f4e79;
+    --go: #2b6cb0;
+    --back: #a63a60;
+    --soon: #d62828;
+    --near: #e07a00;
+    --ok: #1b7f3b;
+    --off: #9aa1ad;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b;
+      --card: #1c212b;
+      --text: #e8ebf0;
+      --muted: #9aa3b2;
+      --line: #2c3340;
+      --accent: #7fb2e5;
+      --go: #6aa5e8;
+      --back: #e07fa4;
+      --soon: #ff6b6b;
+      --near: #ffa94d;
+      --ok: #5fd08a;
+      --off: #6b7280;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    line-height: 1.4;
+    -webkit-text-size-adjust: 100%;
+  }
+  header {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--accent); color: #fff;
+    padding: 12px 16px calc(10px) ;
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+  @media (prefers-color-scheme: dark) { header { background: #1a3a5c; } }
+  .bar { max-width: 960px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+  h1 { font-size: 1.15rem; margin: 0; flex: 1; }
+  .status { font-size: .8rem; opacity: .9; text-align: right; }
+  button {
+    font: inherit; font-size: .85rem; color: #fff; background: rgba(255,255,255,.18);
+    border: 1px solid rgba(255,255,255,.35); border-radius: 8px; padding: 6px 10px; cursor: pointer;
+  }
+  button:active { background: rgba(255,255,255,.3); }
+  main { max-width: 960px; margin: 0 auto; padding: 12px 16px 32px; }
+  .error {
+    display: none; margin-bottom: 12px; padding: 10px 12px; border-radius: 10px;
+    background: #fde8e8; color: #8a1c1c; font-size: .9rem;
+  }
+  @media (prefers-color-scheme: dark) { .error { background: #3a1d1d; color: #ffb4b4; } }
+  .error a { color: inherit; }
+  .direction { margin-bottom: 20px; }
+  .direction h2 {
+    font-size: 1.05rem; margin: 8px 0 10px; padding-left: 10px;
+    border-left: 4px solid var(--go);
+  }
+  .direction.back h2 { border-left-color: var(--back); }
+  .stops { display: grid; gap: 12px; grid-template-columns: 1fr; }
+  @media (min-width: 720px) { .stops { grid-template-columns: 1fr 1fr; } }
+  .stop { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .stop h3 {
+    margin: 0; padding: 10px 14px; font-size: 1rem; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .stop h3 small { color: var(--muted); font-weight: normal; font-size: .78rem; }
+  .row {
+    display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+  }
+  .row:last-child { border-bottom: 0; }
+  .route {
+    font-weight: 700; font-size: 1rem; text-align: center; border-radius: 6px; padding: 3px 0;
+    background: var(--bg); border: 1px solid var(--line);
+  }
+  .info { color: var(--muted); font-size: .78rem; min-width: 0; overflow-wrap: anywhere; }
+  .eta { font-weight: 700; font-size: 1.15rem; text-align: right; white-space: nowrap; }
+  .eta.soon { color: var(--soon); }
+  .eta.near { color: var(--near); }
+  .eta.ok { color: var(--ok); }
+  .eta.sched { color: var(--text); font-weight: 600; font-size: 1rem; }
+  .eta.off { color: var(--off); font-weight: 500; font-size: .9rem; }
+  .row.na .route { opacity: .45; }
+  footer { max-width: 960px; margin: 0 auto; padding: 0 16px 24px; color: var(--muted); font-size: .78rem; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>709 系列等車時間</h1>
+    <div class="status"><div id="updated">載入中…</div><div id="countdown"></div></div>
+    <button id="refresh" type="button" aria-label="立即更新">更新</button>
+  </div>
+</header>
+
+<main>
+  <div class="error" id="error"></div>
+  <div id="board"></div>
+</main>
+
+<footer>
+  資料來源：<a href="https://ebus.tycg.gov.tw/ebus/" target="_blank" rel="noopener">桃園市公車動態資訊系統</a>。
+  每 30 秒自動更新，頁面切到背景時暫停。到站時間僅供參考，以實際車輛為準。
+  「預定」表示車輛尚未發車，顯示的是表定時間。
+</footer>
+
+<script>
+(() => {
+  const API = 'https://ebus.tycg.gov.tw/ebus/graphql';
+  const REFRESH_SEC = 30;
+  const LONGTAN = '龍潭中正路';
+  const YONGNING = '永寧轉運站';
+  // 路線名稱 → 系統代碼(xno)
+  const ROUTES = [
+    { name: '709',  xno: 709 },
+    { name: '709A', xno: 7091 },
+    { name: '709B', xno: 7092 },
+    { name: '709C', xno: 7093 },
+  ];
+  // 方向 L2Y：龍潭中正路在永寧轉運站之前；Y2L：之後
+  const LAYOUT = [
+    { dir: 'L2Y', title: '龍潭 → 永寧', cls: 'go',   stops: [LONGTAN, YONGNING] },
+    { dir: 'Y2L', title: '永寧 → 龍潭', cls: 'back', stops: [YONGNING, LONGTAN] },
+  ];
+
+  const routeFields = `
+    id name
+    estimateTimes { edges { node { id goBack comeTime isSuspended isConstruction isEvent isOperationDay etas { busId etaTime isLast } } } }
+    stations { edges { goBack orderNo node { id name } } }`;
+  const QUERY = `query Q($lang: String!) {
+    ${ROUTES.map(r => `r${r.xno}: route(xno: ${r.xno}, lang: $lang) { ${routeFields} }`).join('\n')}
+  }`;
+
+  const $ = id => document.getElementById(id);
+  let remain = REFRESH_SEC, loading = false, lastLoad = 0;
+
+  // 依停靠順序判斷方向：在同一個 goBack 序列中，
+  // 龍潭中正路排在永寧轉運站前面＝往永寧；排在後面＝往龍潭。
+  // 709C 是環狀線（只有一個 goBack），中正路會出現兩次，用同一規則就能分開。
+  function resolveStops(route) {
+    const seqs = {};
+    for (const e of route.stations.edges) {
+      (seqs[e.goBack] ||= []).push({ goBack: e.goBack, order: e.orderNo, id: e.node.id, name: e.node.name });
+    }
+    const out = { L2Y: {}, Y2L: {} };
+    for (const seq of Object.values(seqs)) {
+      seq.sort((a, b) => a.order - b.order);
+      const yi = seq.findIndex(s => s.name === YONGNING);
+      if (yi < 0) continue;
+      seq.forEach((s, i) => {
+        if (s.name !== LONGTAN) return;
+        const dir = i < yi ? 'L2Y' : 'Y2L';
+        if (!out[dir][LONGTAN]) {
+          out[dir][LONGTAN] = s;
+          out[dir][YONGNING] = seq[yi];
+        }
+      });
+    }
+    return out;
+  }
+
+  function classify(est) {
+    if (!est) return { text: '無資料', cls: 'off', sort: 1e6 };
+    if (est.isOperationDay === false) return { text: '今日未營運', cls: 'off', sort: 1e6 };
+    if (est.isSuspended) return { text: '目前停駛', cls: 'off', sort: 1e6 };
+    const ct = (est.comeTime || '').trim();
+    const eta = est.etas && est.etas.length ? est.etas[0] : null;
+    if (/進站中/.test(ct)) return { text: '進站中', cls: 'soon', sort: 0 };
+    if (/即將/.test(ct)) return { text: '即將進站', cls: 'soon', sort: 1 };
+    const m = ct.match(/^(\d+)\s*分/);
+    if (m || eta) {
+      const min = m ? Number(m[1]) : eta.etaTime;
+      return { text: `${min} 分`, cls: min <= 3 ? 'soon' : min <= 10 ? 'near' : 'ok', sort: min };
+    }
+    const t = ct.match(/^(\d{1,2}):(\d{2})$/);
+    if (t) {
+      const now = new Date();
+      let diff = (Number(t[1]) * 60 + Number(t[2])) - (now.getHours() * 60 + now.getMinutes());
+      if (diff < -120) diff += 1440;
+      return { text: `預定 ${ct}`, cls: 'sched', sort: 1000 + diff };
+    }
+    if (ct) return { text: ct, cls: 'off', sort: 1e5 };
+    return { text: '尚未發車', cls: 'off', sort: 1e5 };
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function render(data) {
+    const prepared = ROUTES.map(r => {
+      const route = data[`r${r.xno}`];
+      if (!route) return { ...r, stops: null, est: new Map() };
+      const est = new Map();
+      for (const e of route.estimateTimes.edges) est.set(`${e.node.id}|${e.node.goBack}`, e.node);
+      return { ...r, stops: resolveStops(route), est };
+    });
+
+    $('board').innerHTML = LAYOUT.map(sec => `
+      <section class="direction ${sec.cls}">
+        <h2>${esc(sec.title)}</h2>
+        <div class="stops">
+          ${sec.stops.map(stopName => {
+            const rows = prepared.map(r => {
+              const stop = r.stops && r.stops[sec.dir][stopName];
+              if (!stop) return { r, na: true, c: { text: r.stops ? '無此方向' : '查無路線', cls: 'off', sort: 1e7 } };
+              const est = r.est.get(`${stop.id}|${stop.goBack}`);
+              const c = classify(est);
+              const etas = (est && est.etas) || [];
+              const notes = [];
+              if (etas[0] && etas[0].busId) notes.push(etas[0].busId);
+              if (etas[0] && etas[0].isLast) notes.push('末班車');
+              if (etas[1]) notes.push(`下一班 ${etas[1].etaTime} 分`);
+              return { r, na: false, c, note: notes.join(' · ') };
+            }).sort((a, b) => a.c.sort - b.c.sort);
+            const sub = sec.stops.indexOf(stopName) === 0 ? '上車' : '到達';
+            return `
+              <div class="stop">
+                <h3>${esc(stopName)} <small>${sub}</small></h3>
+                ${rows.map(x => `
+                  <div class="row${x.na ? ' na' : ''}">
+                    <div class="route">${esc(x.r.name)}</div>
+                    <div class="info">${esc(x.note || '')}</div>
+                    <div class="eta ${x.c.cls}">${esc(x.c.text)}</div>
+                  </div>`).join('')}
+              </div>`;
+          }).join('')}
+        </div>
+      </section>`).join('');
+  }
+
+  function showError(msg) {
+    const el = $('error');
+    if (!msg) { el.style.display = 'none'; return; }
+    el.innerHTML = `${esc(msg)}，請稍後再試，或改用 <a href="https://ebus.tycg.gov.tw/ebus/" target="_blank" rel="noopener">桃園公車動態網站</a>。`;
+    el.style.display = 'block';
+  }
+
+  async function load() {
+    if (loading) return;
+    loading = true;
+    $('updated').textContent = '更新中…';
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 15000);
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: QUERY, variables: { lang: 'zh' } }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(to);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.data) throw new Error((json.errors && json.errors[0] && json.errors[0].message) || '回應格式不符');
+      render(json.data);
+      showError('');
+      const now = new Date();
+      $('updated').textContent = `更新於 ${now.toLocaleTimeString('zh-TW', { hour12: false })}`;
+    } catch (err) {
+      console.error(err);
+      showError(`資料暫時無法取得（${err.name === 'AbortError' ? '逾時' : err.message}）`);
+      $('updated').textContent = '更新失敗';
+    } finally {
+      loading = false;
+      remain = REFRESH_SEC;
+      lastLoad = Date.now();
+    }
+  }
+
+  function tick() {
+    if (document.hidden) return;
+    remain -= 1;
+    $('countdown').textContent = `${Math.max(remain, 0)} 秒後更新`;
+    if (remain <= 0) load();
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() - lastLoad > 10000) load();
+  });
+  $('refresh').addEventListener('click', load);
+
+  load();
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

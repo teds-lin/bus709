@@ -75,8 +75,8 @@
     border-left: 4px solid var(--go);
   }
   .direction.back h2 { border-left-color: var(--back); }
-  .stops { display: grid; gap: 12px; grid-template-columns: 1fr; }
-  @media (min-width: 720px) { .stops { grid-template-columns: 1fr 1fr; } }
+  .stops { display: grid; gap: 12px; }
+  @media (min-width: 720px) { #board { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } }
   .stop { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
   .stop h3 {
     margin: 0; padding: 10px 14px; font-size: 1rem; border-bottom: 1px solid var(--line);
@@ -137,10 +137,10 @@
     { name: '709B', xno: 7092 },
     { name: '709C', xno: 7093 },
   ];
-  // 方向 L2Y：龍潭中正路在永寧轉運站之前；Y2L：之後
+  // 方向 L2Y：龍潭中正路在永寧轉運站之前；Y2L：之後。每個方向只顯示上車站
   const LAYOUT = [
-    { dir: 'L2Y', title: '龍潭 → 永寧', cls: 'go',   stops: [LONGTAN, YONGNING] },
-    { dir: 'Y2L', title: '永寧 → 龍潭', cls: 'back', stops: [YONGNING, LONGTAN] },
+    { dir: 'L2Y', title: '龍潭 → 永寧', cls: 'go',   stops: [LONGTAN] },
+    { dir: 'Y2L', title: '永寧 → 龍潭', cls: 'back', stops: [YONGNING] },
   ];
 
   const routeFields = `
@@ -235,10 +235,9 @@
               if (etas[1]) notes.push(`下一班 ${etas[1].etaTime} 分`);
               return { r, na: false, c, note: notes.join(' · ') };
             }).sort((a, b) => a.c.sort - b.c.sort);
-            const sub = sec.stops.indexOf(stopName) === 0 ? '上車' : '到達';
             return `
               <div class="stop">
-                <h3>${esc(stopName)} <small>${sub}</small></h3>
+                <h3>${esc(stopName)} <small>上車站</small></h3>
                 ${rows.map(x => `
                   <div class="row${x.na ? ' na' : ''}">
                     <div class="route">${esc(x.r.name)}</div>

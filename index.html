@@ -241,7 +241,8 @@
           ${sec.stops.map(stopName => {
             const rows = prepared.map(r => {
               const stop = r.stops && r.stops[sec.dir][stopName];
-              if (!stop) return { r, na: true, c: { text: r.stops ? '無此方向' : '查無路線', cls: 'off', sort: 1e7 } };
+              if (!stop && r.stops) return null; // 路線沒有這個方向（如 709A 往龍潭）就不顯示
+              if (!stop) return { r, na: true, c: { text: '查無路線', cls: 'off', sort: 1e7 } };
               const est = r.est.get(`${stop.id}|${stop.goBack}`);
               const c = classify(est);
               const etas = (est && est.etas) || [];
@@ -250,7 +251,7 @@
               if (etas[0] && etas[0].isLast) notes.push('末班車');
               if (etas[1]) notes.push(`下一班 ${etas[1].etaTime} 分`);
               return { r, na: false, c, note: notes.join(' · ') };
-            }).sort((a, b) => a.c.sort - b.c.sort);
+            }).filter(Boolean).sort((a, b) => a.c.sort - b.c.sort);
             return `
               <div class="stop">
                 <h3>${esc(stopName)} <small>上車站</small></h3>

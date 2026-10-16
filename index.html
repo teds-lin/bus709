@@ -100,6 +100,15 @@
   .eta.sched { color: var(--text); font-weight: 600; font-size: 1rem; }
   .eta.off { color: var(--off); font-weight: 500; font-size: .9rem; }
   .row.na .route { opacity: .45; }
+  #paths { margin-top: 4px; }
+  @media (min-width: 720px) { #paths { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } }
+  .paths h2 { font-size: 1rem; }
+  .path { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+  .path .names { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .path .names .route { padding: 2px 10px; font-size: .9rem; }
+  .path ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; font-size: .9rem; }
+  .path li:not(:last-child)::after { content: "›"; color: var(--muted); margin: 0 6px; }
+  .path li.end { font-weight: 700; }
   footer { max-width: 960px; margin: 0 auto; padding: 0 16px 24px; color: var(--muted); font-size: .78rem; }
   footer a { color: var(--muted); }
 </style>
@@ -116,6 +125,7 @@
 <main>
   <div class="error" id="error"></div>
   <div id="board"></div>
+  <div id="paths"></div>
 </main>
 
 <footer>
@@ -173,6 +183,8 @@
         if (!out[dir][LONGTAN]) {
           out[dir][LONGTAN] = s;
           out[dir][YONGNING] = seq[yi];
+          // 上車站到下車站之間依序停靠的站（含頭尾）
+          out[dir].path = dir === 'L2Y' ? seq.slice(i, yi + 1) : seq.slice(yi, i + 1);
         }
       });
     }
@@ -252,6 +264,27 @@
           }).join('')}
         </div>
       </section>`).join('');
+
+    // 各班次停靠站：停靠順序相同的路線合併成一組
+    $('paths').innerHTML = LAYOUT.map(sec => {
+      const groups = new Map();
+      for (const r of prepared) {
+        const path = r.stops && r.stops[sec.dir].path;
+        if (!path) continue;
+        const key = path.map(s => s.name).join('>');
+        if (!groups.has(key)) groups.set(key, { names: [], path });
+        groups.get(key).names.push(r.name);
+      }
+      return `
+        <section class="direction paths ${sec.cls}">
+          <h2>${esc(sec.title)} 停靠站</h2>
+          ${[...groups.values()].map(g => `
+            <div class="path">
+              <div class="names">${g.names.map(n => `<span class="route">${esc(n)}</span>`).join('')}</div>
+              <ol>${g.path.map((s, i) => `<li${i === 0 || i === g.path.length - 1 ? ' class="end"' : ''}>${esc(s.name)}</li>`).join('')}</ol>
+            </div>`).join('')}
+        </section>`;
+    }).join('');
   }
 
   function showError(msg) {

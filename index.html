@@ -121,7 +121,7 @@
 <footer>
   資料來源：<a href="https://ebus.tycg.gov.tw/ebus/" target="_blank" rel="noopener">桃園市公車動態資訊系統</a>。
   每 30 秒自動更新，頁面切到背景時暫停。到站時間僅供參考，以實際車輛為準。
-  「預定」表示車輛尚未發車，顯示的是表定時間。
+  「預定」表示車輛尚未發車，顯示的是表定時間；表定時間在 30 分鐘內時改顯示「約 X 分」。
 </footer>
 
 <script>
@@ -199,6 +199,10 @@
       const now = new Date();
       let diff = (Number(t[1]) * 60 + Number(t[2])) - (now.getHours() * 60 + now.getMinutes());
       if (diff < -120) diff += 1440;
+      // 表定時間在 30 分鐘內：改顯示等待分鐘數，表定時間移到備註
+      if (diff >= 0 && diff <= 30) {
+        return { text: diff === 0 ? '即將發車' : `約 ${diff} 分`, cls: diff <= 3 ? 'soon' : diff <= 10 ? 'near' : 'ok', sort: diff, note: `表定 ${ct}` };
+      }
       return { text: `預定 ${ct}`, cls: 'sched', sort: 1000 + diff };
     }
     if (ct) return { text: ct, cls: 'off', sort: 1e5 };
@@ -229,7 +233,7 @@
               const est = r.est.get(`${stop.id}|${stop.goBack}`);
               const c = classify(est);
               const etas = (est && est.etas) || [];
-              const notes = [];
+              const notes = c.note ? [c.note] : [];
               if (etas[0] && etas[0].busId) notes.push(etas[0].busId);
               if (etas[0] && etas[0].isLast) notes.push('末班車');
               if (etas[1]) notes.push(`下一班 ${etas[1].etaTime} 分`);

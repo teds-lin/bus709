@@ -86,6 +86,8 @@
     display: flex; justify-content: space-between; align-items: baseline;
   }
   .stop h3 small { color: var(--muted); font-weight: normal; font-size: .78rem; }
+  .daytime { padding: 6px 14px; font-size: .85rem; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--bg); }
+  .daytime b { color: var(--text); }
   .row {
     display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 8px;
     padding: 10px 14px; border-bottom: 1px solid var(--line);
@@ -166,6 +168,12 @@
 
   const $ = id => document.getElementById(id);
   const RETRY_SEC = 5;
+  // 起點到上車站的預設表定車程（分）；即時資料有各站表定時間時以即時推算為準
+  const DEFAULT_OFFSET = { '709|L2Y': 15, '709A|L2Y': 0, '709B|L2Y': 15, '709C|L2Y': 6, '709|Y2L': 0, '709B|Y2L': 0, '709C|Y2L': 26 };
+  const SCHED_QUERY = `query S {
+    ${ROUTES.map(r => `s${r.xno}: dailySchedule(xno: ${r.xno}) { __typename ... on DailyTimeTableConnection { edges { node { goBack scheduleTime } } } }`).join('\n')}
+  }`;
+  let sched = null, schedDay = '';
   let remain = REFRESH_SEC, loading = false, lastLoad = 0, lastOk = 0, fails = 0, lastErr = '';
 
   // 依停靠順序判斷方向：在同一個 goBack 序列中，
@@ -187,6 +195,8 @@
         if (!out[dir][LONGTAN]) {
           out[dir][LONGTAN] = s;
           out[dir][YONGNING] = seq[yi];
+          // 上車站在序列中的位置，用來從起點發車時間推算到站時間
+          out[dir].board = { seq, idx: dir === 'L2Y' ? i : yi, goBack: s.goBack };
           // 上車站到下車站之間依序停靠的站（含頭尾）
           out[dir].path = dir === 'L2Y' ? seq.slice(i, yi + 1) : seq.slice(yi, i + 1);
         }
@@ -229,6 +239,52 @@
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  const toMin = s => { const m = /^(\d{1,2}):(\d{2})$/.exec(s || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const fmt = n => `${String(Math.floor(n / 60) % 24).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+
+  // 起點到上車站的車程：即時資料中起點與上車站都顯示表定時間（同一班未發車）時直接相減，否則用預設值
+  function travelMin(r, dir) {
+    const b = r.stops[dir].board;
+    if (b.idx === 0) return 0;
+    const at = s => r.est.get(`${s.id}|${s.goBack}`);
+    const o = toMin(at(b.seq[0]) && at(b.seq[0]).comeTime);
+    const s = toMin(at(b.seq[b.idx]) && at(b.seq[b.idx]).comeTime);
+    if (o !== null && s !== null && s - o >= 0 && s - o <= 120) return s - o;
+    return DEFAULT_OFFSET[`${r.name}|${dir}`] ?? null;
+  }
+
+  // 今日在上車站可等到的首班（往永寧）或末班（往龍潭）
+  function dayTimeLine(dir, prepared) {
+    if (!sched) return '';
+    const cands = [];
+    for (const r of prepared) {
+      const b = r.stops && r.stops[dir] && r.stops[dir].board;
+      const s = sched[`s${r.xno}`];
+      if (!b || !s || !s.edges) continue;
+      const times = s.edges.filter(e => e.node.goBack === b.goBack).map(e => toMin(e.node.scheduleTime)).filter(x => x !== null);
+      const off = travelMin(r, dir);
+      if (!times.length || off === null) continue;
+      const t = dir === 'L2Y' ? Math.min(...times) + off : Math.max(...times) + off;
+      cands.push({ t, name: r.name, approx: off > 0 });
+    }
+    if (!cands.length) return `<div class="daytime">今日${dir === 'L2Y' ? '首' : '末'}班：查無時刻表</div>`;
+    const pick = cands.reduce((a, c) => (dir === 'L2Y' ? c.t < a.t : c.t > a.t) ? c : a);
+    const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes();
+    const passed = dir === 'Y2L' && nowMin > pick.t + 5 && now.getHours() >= 5;
+    return `<div class="daytime">今日${dir === 'L2Y' ? '首' : '末'}班 <b>${pick.approx ? '約 ' : ''}${fmt(pick.t)}</b>（${esc(pick.name)}）${passed ? '・已過' : ''}</div>`;
+  }
+
+  // 時刻表每天抓一次；失敗不影響即時資料
+  async function loadSched() {
+    const day = new Date().toDateString();
+    if (sched && schedDay === day) return;
+    try {
+      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: SCHED_QUERY }) });
+      const json = await res.json();
+      if (json.data) { sched = json.data; schedDay = day; }
+    } catch (err) { console.error(err); }
+  }
+
   function render(data) {
     const prepared = ROUTES.map(r => {
       const route = data[`r${r.xno}`];
@@ -259,6 +315,7 @@
             return `
               <div class="stop">
                 <h3>${esc(stopName)} <small>上車站</small></h3>
+                ${dayTimeLine(sec.dir, prepared)}
                 ${rows.map(x => `
                   <div class="row${x.na ? ' na' : ''}">
                     <div class="route">${esc(x.r.name)}</div>
@@ -330,6 +387,7 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (!json.data) throw new Error((json.errors && json.errors[0] && json.errors[0].message) || '回應格式不符');
+      await loadSched();
       render(json.data);
       fails = 0;
       lastOk = Date.now();
